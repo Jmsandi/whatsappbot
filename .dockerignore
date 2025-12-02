@@ -1,0 +1,40 @@
+# Ignore development files
+node_modules/
+npm-debug.log
+.DS_Store
+
+# Ignore build output
+dist/
+
+# Ignore environment files (use Railway's env vars instead)
+.env
+.env.local
+.env.*.local
+
+# Ignore WhatsApp session data (will be recreated on Railway)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Ignore test files
+test-*.ts
+test-*.sh
+*.test.ts
+*.spec.ts
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore temporary files
+tmp/
+temp/

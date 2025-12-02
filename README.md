@@ -4,6 +4,10 @@ A production-ready Node.js TypeScript service that bridges WhatsApp messages to 
 
 ## Features
 
+- ✅ **Custom Agent Framework** - Intelligent conversation orchestration with tool calling (built on Geneline-X)
+- ✅ **Conversation Memory** - Maintains context across messages (configurable history limit)
+- ✅ **Knowledge Search Tool** - Queries Geneline-X knowledge base when needed
+- ✅ **Multi-Step Reasoning** - Agent can make multiple tool calls to answer complex questions
 - ✅ **WhatsApp Integration** - Uses `whatsapp-web.js` with LocalAuth for persistent sessions
 - ✅ **Geneline-X AI** - Connects to Geneline-X message endpoint with streaming support
 - ✅ **Document Ingestion** - Upload PDFs to train the chatbot's knowledge base
@@ -14,6 +18,7 @@ A production-ready Node.js TypeScript service that bridges WhatsApp messages to 
 - ✅ **Admin API** - REST endpoints for management and monitoring
 - ✅ **Structured Logging** - Winston-based logging with event types
 - ✅ **TypeScript** - Full type safety and modern ES2020 features
+- ✅ **Railway Ready** - Optimized for Railway deployment with Docker support
 
 ## Prerequisites
 
@@ -62,6 +67,49 @@ Build and run:
 npm run build
 npm start
 ```
+
+### Deploy to Railway
+
+This project is optimized for Railway deployment with automatic Docker builds.
+
+**Quick Deploy:**
+
+1. **Push to GitHub** (already done):
+   ```bash
+   git push origin main
+   ```
+
+2. **Deploy on Railway**:
+   - Go to [railway.app](https://railway.app)
+   - Click "New Project" → "Deploy from GitHub repo"
+   - Select `Jmsandi/whatsappbot`
+   - Railway will automatically detect the Dockerfile and build
+
+3. **Set Environment Variables** in Railway dashboard:
+   ```
+   GENELINE_HOST=https://message.geneline-x.net
+   GENELINE_API_KEY=your-api-key
+   GENELINE_CHATBOT_ID=your-chatbot-id
+   ADMIN_API_KEY=your-admin-secret
+   ENABLE_AGENT_MODE=true
+   NODE_ENV=production
+   ```
+
+4. **Add Persistent Volume** (important for WhatsApp sessions):
+   - In Railway project settings → "Volumes"
+   - Mount path: `/app/.wwebjs_auth`
+   - This prevents re-scanning QR code on every deploy
+
+5. **Access QR Code**:
+   - Once deployed, visit: `https://your-app.railway.app/qr`
+   - Scan with WhatsApp to authenticate
+
+**Railway Configuration Files:**
+- `railway.json` - Build and deploy configuration
+- `Dockerfile` - Container with Chromium dependencies for Puppeteer
+- `.dockerignore` - Optimizes build size
+- `.env.railway` - Template for environment variables
+
 
 ### Initial Setup - WhatsApp Pairing
 
