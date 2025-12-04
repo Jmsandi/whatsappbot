@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
 
@@ -12,6 +13,16 @@ export class ApiServer {
     }
 
     private setupMiddleware(): void {
+        // CORS - Allow admin dashboard to access the API
+        this.app.use(cors({
+            origin: [
+                'http://localhost:3000',  // Local development
+                'http://127.0.0.1:3000',
+                process.env.DASHBOARD_URL || '',
+            ].filter(Boolean),
+            credentials: true,
+        }));
+
         // Body parsing
         this.app.use(express.json());
         this.app.use(express.urlencoded({ extended: true }));

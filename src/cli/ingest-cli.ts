@@ -235,4 +235,157 @@ program
         }
     });
 
-program.parse();
+program
+    .command('json')
+    .description('Ingest JSON data into the knowledge base')
+    .argument('<file>', 'Path to the JSON file')
+    .option('-t, --title <title>', 'Dataset title')
+    .option('-d, --description <description>', 'Dataset description')
+    .option('-c, --category <category>', 'Dataset category')
+    .option('--no-wait', 'Do not wait for job completion')
+    .action(async (filePath: string, options: any) => {
+        try {
+            console.log('\n📊 Geneline-X JSON Data Ingestion\n');
+            console.log('='.repeat(50));
+
+            // Resolve file path
+            const absolutePath = path.resolve(filePath);
+            console.log(`📁 File: ${absolutePath}`);
+
+            // Read and parse JSON
+            const fs = await import('fs/promises');
+            console.log('\n⏳ Reading JSON file...');
+            const jsonContent = await fs.readFile(absolutePath, 'utf-8');
+            const jsonData = JSON.parse(jsonContent);
+
+            const recordCount = Array.isArray(jsonData) ? jsonData.length : 1;
+            console.log(`✅ JSON parsed successfully`);
+            console.log(`   Records: ${recordCount.toLocaleString()}`);
+
+            // Prepare request
+            const title = options.title || path.basename(filePath, '.json');
+            console.log(`\n📝 Title: ${title}`);
+            if (options.description) {
+                console.log(`📝 Description: ${options.description}`);
+            }
+            if (options.category) {
+                console.log(`🏷️  Category: ${options.category}`);
+            }
+
+            // Start ingestion
+            console.log('\n⏳ Converting to markdown and uploading...');
+            const client = new IngestClient();
+            const result = await client.ingestJson({
+                chatbotId: config.geneline.chatbotId,
+                jsonData,
+                title,
+                description: options.description,
+                category: options.category,
+            });
+
+            console.log(`\n✅ Upload initiated successfully!`);
+            console.log(`   Job ID: ${result.jobId}`);
+
+            if (options.wait !== false) {
+                console.log('\n⏳ Waiting for processing to complete...');
+                const finalStatus = await client.waitForJobCompletion(
+                    result.jobId,
+                    (status: IngestJobStatus) => {
+                        console.log(`   Status: ${status.status} - ${status.message || ''}`);
+                    }
+                );
+
+                if (finalStatus.status === 'completed') {
+                    console.log('\n✅ JSON data ingested successfully!');
+                    console.log('   The chatbot can now answer questions about this data.');
+                } else {
+                    console.log(`\n❌ Job failed: ${finalStatus.message}`);
+                    process.exit(1);
+                }
+            } else {
+                console.log('\nℹ️  Job started in background. Check status with:');
+                console.log(`   npm run ingest status ${result.jobId}`);
+            }
+        } catch (error) {
+            console.error(`\n❌ Error: ${(error as Error).message}`);
+            logger.error('JSON ingestion failed', error as Error);
+            process.exit(1);
+        }
+    });
+
+program
+    .command('csv')
+    .description('Ingest CSV data into the knowledge base')
+    .argument('<file>', 'Path to the CSV file')
+    .option('-t, --title <title>', 'Dataset title')
+    .option('-d, --description <description>', 'Dataset description')
+    .option('-c, --category <category>', 'Dataset category')
+    .option('--no-wait', 'Do not wait for job completion')
+    .action(async (filePath: string, options: any) => {
+        try {
+            console.log('\n📊 Geneline-X CSV Data Ingestion\n');
+            console.log('='.repeat(50));
+
+            // Resolve file path
+            const absolutePath = path.resolve(filePath);
+            console.log(`📁 File: ${absolutePath}`);
+
+            // Validate file exists
+            const validation = FileProcessor.validateFilePath(absolutePath);
+            if (!validation.valid) {
+                console.error(`❌ Error: ${validation.error}`);
+                process.exit(1);
+            }
+
+            // Prepare request
+            const title = options.title || path.basename(filePath, '.csv');
+            console.log(`\n📝 Title: ${title}`);
+            if (options.description) {
+                console.log(`📝 Description: ${options.description}`);
+            }
+            if (options.category) {
+                console.log(`🏷️  Category: ${options.category}`);
+            }
+
+            // Start ingestion
+            console.log('\n⏳ Parsing CSV and converting to markdown...');
+            const client = new IngestClient();
+            const result = await client.ingestCsv({
+                chatbotId: config.geneline.chatbotId,
+                csvPath: absolutePath,
+                title,
+                description: options.description,
+                category: options.category,
+            });
+
+            console.log(`\n✅ Upload initiated successfully!`);
+            console.log(`   Job ID: ${result.jobId}`);
+
+            if (options.wait !== false) {
+                console.log('\n⏳ Waiting for processing to complete...');
+                const finalStatus = await client.waitForJobCompletion(
+                    result.jobId,
+                    (status: IngestJobStatus) => {
+                        console.log(`   Status: ${status.status} - ${status.message || ''}`);
+                    }
+                );
+
+                if (finalStatus.status === 'completed') {
+                    console.log('\n✅ CSV data ingested successfully!');
+                    console.log('   The chatbot can now answer questions about this data.');
+                } else {
+                    console.log(`\n❌ Job failed: ${finalStatus.message}`);
+                    process.exit(1);
+                }
+            } else {
+                console.log('\nℹ️  Job started in background. Check status with:');
+                console.log(`   npm run ingest status ${result.jobId}`);
+            }
+        } catch (error) {
+            console.error(`\n❌ Error: ${(error as Error).message}`);
+            logger.error('CSV ingestion failed', error as Error);
+            process.exit(1);
+        }
+    });
+
+program.parse(process.argv);

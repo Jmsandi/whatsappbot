@@ -53,3 +53,25 @@ export interface FileMetadata {
     pages?: number;
     extractedText?: string;
 }
+
+export interface IngestJsonRequest {
+    chatbotId: string;
+    jsonData: object | object[];
+    title?: string;
+    description?: string;
+    category?: string;
+    metadata?: {
+        [key: string]: any;
+    };
+}
+
+export interface IngestCsvRequest {
+    chatbotId: string;
+    csvPath: string;
+    title?: string;
+    description?: string;
+    category?: string;
+    metadata?: {
+        [key: string]: any;
+    };
+}

@@ -6,6 +6,9 @@ import { ApiServer } from './api/server';
 import { createAdminRouter } from './api/routes';
 import { logger } from './utils/logger';
 import { config } from './config/env';
+import { testSupabaseConnection } from './config/supabase';
+import * as cron from 'node-cron';
+import { checkAndSendBroadcasts } from './scheduler/broadcast-scheduler';
 
 class Application {
     private whatsappClient: WhatsAppClient;
@@ -13,6 +16,7 @@ class Application {
     private messageWorker: MessageWorker;
     private messageHandler: MessageHandler;
     private apiServer: ApiServer;
+    private broadcastCronJob: cron.ScheduledTask | null = null;
 
     constructor() {
         logger.info('Initializing WhatsApp-Geneline Bridge...');
@@ -36,11 +40,13 @@ class Application {
 
         // Set response senders for worker
         this.messageWorker.setResponseSender(async (chatId, messageId, response) => {
-            await this.messageHandler.sendResponse(chatId, messageId, response);
+            // MessageHandler.sendResponse only needs chatId and response now
+            await this.messageHandler.sendResponse(chatId, response);
         });
 
         this.messageWorker.setFallbackSender(async (chatId) => {
-            await this.messageHandler.sendFallback(chatId);
+            // Send a generic fallback message
+            await this.messageHandler.sendResponse(chatId, "I'm sorry, I couldn't process your request. Please try again.");
         });
 
         // Setup WhatsApp message handler
@@ -62,13 +68,34 @@ class Application {
         try {
             logger.info('Starting application...');
 
+            // Test Supabase connection
+            logger.info('Testing Supabase connection...');
+            const supabaseConnected = await testSupabaseConnection();
+            if (supabaseConnected) {
+                logger.info('✓ Supabase connection successful');
+            } else {
+                logger.warn('⚠ Supabase connection failed - database sync will not work');
+                logger.warn('Please check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env');
+            }
+
             // Start API server
             await this.apiServer.start();
             logger.info(`API server started on port ${config.port}`);
 
             // Initialize WhatsApp client
             await this.whatsappClient.initialize();
-            logger.info('WhatsApp client initialized');
+            logger.info('✓ WhatsApp client initialized');
+
+            // Start broadcast scheduler after WhatsApp is ready
+            // Start broadcast scheduler (runs every minute)
+            this.broadcastCronJob = cron.schedule('* * * * *', async () => {
+                try {
+                    await checkAndSendBroadcasts(this.whatsappClient);
+                } catch (error) {
+                    logger.error('Error in broadcast cron job', error as Error);
+                }
+            });
+            logger.info('✓ Broadcast scheduler started (runs every minute)');
 
             logger.info('Application started successfully');
             logger.info(`Environment: ${config.nodeEnv}`);
@@ -76,6 +103,7 @@ class Application {
             logger.info(`Max Concurrency: ${config.queue.maxConcurrency}`);
             logger.info(`Per-Chat Rate Limit: ${config.queue.perChatRateLimitMs}ms`);
             logger.info(`Allow Group Messages: ${config.whatsapp.allowGroupMessages}`);
+            logger.info(`Supabase Integration: ${supabaseConnected ? 'Enabled' : 'Disabled'}`);
 
         } catch (error) {
             logger.error('Failed to start application', error as Error);
@@ -87,6 +115,12 @@ class Application {
         logger.info('Stopping application...');
 
         try {
+            // Stop broadcast cron job
+            if (this.broadcastCronJob) {
+                this.broadcastCronJob.stop();
+                logger.info('✓ Broadcast scheduler stopped');
+            }
+
             // Stop API server
             await this.apiServer.stop();
 

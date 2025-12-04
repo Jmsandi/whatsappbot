@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 import {
     IngestFileRequest,
     IngestUrlRequest,
+    IngestJsonRequest,
+    IngestCsvRequest,
     IngestJobResponse,
     IngestJobStatus,
     IngestJobListResponse,
@@ -248,6 +250,153 @@ export class IngestClient {
             logger.error('Failed to list jobs', new Error(axiosError.message), errorInfo);
             throw new Error(`Failed to list jobs: ${axiosError.message}${axiosError.response?.status ? ` (HTTP ${axiosError.response.status})` : ''}`);
         }
+    }
+
+    /**
+     * Ingest JSON data by converting it to markdown format
+     */
+    async ingestJson(request: IngestJsonRequest): Promise<IngestJobResponse> {
+        try {
+            logger.info('Converting JSON to markdown for ingestion', {
+                title: request.title,
+                isArray: Array.isArray(request.jsonData),
+            });
+
+            // Convert JSON to markdown
+            const markdown = this.convertJsonToMarkdown(
+                request.jsonData,
+                request.title || 'Data Import',
+                request.description
+            );
+
+            // Create buffer from markdown
+            const buffer = Buffer.from(markdown, 'utf-8');
+            const filename = `${request.title?.replace(/\s+/g, '_') || 'data'}.md`;
+
+            // Upload as file
+            return await this.ingestFile({
+                chatbotId: request.chatbotId,
+                file: buffer,
+                filename,
+                mimeType: 'text/markdown',
+                metadata: {
+                    title: request.title,
+                    description: request.description,
+                    category: request.category,
+                    source: 'json_import',
+                    recordCount: Array.isArray(request.jsonData)
+                        ? request.jsonData.length
+                        : 1,
+                    ...request.metadata,
+                },
+            });
+        } catch (error) {
+            logger.error('JSON ingestion failed', error as Error);
+            throw new Error(`JSON ingestion error: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * Ingest CSV data by converting it to markdown format
+     */
+    async ingestCsv(request: IngestCsvRequest): Promise<IngestJobResponse> {
+        try {
+            const fs = await import('fs/promises');
+            const { parse } = await import('csv-parse/sync');
+
+            logger.info('Reading and converting CSV to markdown', {
+                path: request.csvPath,
+                title: request.title,
+            });
+
+            // Read CSV file
+            const csvContent = await fs.readFile(request.csvPath, 'utf-8');
+
+            // Parse CSV
+            const records = parse(csvContent, {
+                columns: true,
+                skip_empty_lines: true,
+                trim: true,
+            });
+
+            logger.info('CSV parsed successfully', {
+                recordCount: records.length,
+            });
+
+            // Convert to markdown
+            const markdown = this.convertJsonToMarkdown(
+                records,
+                request.title || 'CSV Import',
+                request.description
+            );
+
+            // Create buffer from markdown
+            const buffer = Buffer.from(markdown, 'utf-8');
+            const filename = `${request.title?.replace(/\s+/g, '_') || 'data'}.md`;
+
+            // Upload as file
+            return await this.ingestFile({
+                chatbotId: request.chatbotId,
+                file: buffer,
+                filename,
+                mimeType: 'text/markdown',
+                metadata: {
+                    title: request.title,
+                    description: request.description,
+                    category: request.category,
+                    source: 'csv_import',
+                    recordCount: records.length,
+                    ...request.metadata,
+                },
+            });
+        } catch (error) {
+            logger.error('CSV ingestion failed', error as Error);
+            throw new Error(`CSV ingestion error: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * Convert JSON data to markdown format
+     */
+    private convertJsonToMarkdown(
+        data: object | object[],
+        title: string,
+        description?: string
+    ): string {
+        let markdown = `# ${title}\n\n`;
+
+        if (description) {
+            markdown += `${description}\n\n`;
+        }
+
+        markdown += '---\n\n';
+
+        const records = Array.isArray(data) ? data : [data];
+
+        records.forEach((record, index) => {
+            markdown += `## Record ${index + 1}\n\n`;
+
+            Object.entries(record).forEach(([key, value]) => {
+                // Format the key to be more readable
+                const formattedKey = key
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (l) => l.toUpperCase());
+
+                // Format the value
+                let formattedValue = value;
+                if (value === null || value === undefined || value === '') {
+                    formattedValue = 'N/A';
+                } else if (typeof value === 'object') {
+                    formattedValue = JSON.stringify(value);
+                }
+
+                markdown += `- **${formattedKey}**: ${formattedValue}\n`;
+            });
+
+            markdown += '\n';
+        });
+
+        return markdown;
     }
 
     private shouldRetry(error: AxiosError, attempt: number): boolean {

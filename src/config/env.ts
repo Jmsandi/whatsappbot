@@ -34,6 +34,10 @@ interface Config {
         maxIterations: number;
         conversationHistoryLimit: number;
     };
+    supabase: {
+        url: string;
+        serviceRoleKey: string;
+    };
 }
 
 function getEnvVar(key: string, defaultValue?: string): string {
@@ -56,7 +60,7 @@ function getEnvBoolean(key: string, defaultValue: boolean): boolean {
 
 export const config: Config = {
     nodeEnv: getEnvVar('NODE_ENV', 'development'),
-    port: getEnvNumber('PORT', 3000),
+    port: getEnvNumber('PORT', 3001),
     geneline: {
         host: getEnvVar('GENELINE_HOST'),
         apiKey: getEnvVar('GENELINE_API_KEY'),
@@ -87,5 +91,9 @@ export const config: Config = {
         enabled: getEnvBoolean('ENABLE_AGENT_MODE', false),
         maxIterations: getEnvNumber('AGENT_MAX_ITERATIONS', 5),
         conversationHistoryLimit: getEnvNumber('AGENT_CONVERSATION_HISTORY_LIMIT', 10),
+    },
+    supabase: {
+        url: getEnvVar('SUPABASE_URL'),
+        serviceRoleKey: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
     },
 };

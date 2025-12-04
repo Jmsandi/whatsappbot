@@ -100,15 +100,30 @@ export class MessageWorker {
     private async processWithAgent(chatId: string, messageId: string, messageText: string): Promise<void> {
         logger.info('Processing message with agent', { chatId, messageId });
 
-        const agentResponse = await this.agentLoop!.run(chatId, messageText);
+        // Get user role for role-based prompting
+        const phone = chatId.split('@')[0];
+        const { getUserRoleByPhone } = await import('../utils/role-manager');
+        const userRole = await getUserRoleByPhone(phone);
+
+        logger.debug('User role retrieved for agent processing', { chatId, userRole });
+
+        const agentResponse = await this.agentLoop!.run(chatId, messageText, userRole);
 
         logger.info('Agent processing completed', {
             chatId,
             messageId,
+            userRole,
             iterations: agentResponse.iterations,
             toolCallsCount: agentResponse.toolCallsCount,
             responseLength: agentResponse.response.length,
+            shouldEscalate: agentResponse.shouldEscalate,
+            confidence: agentResponse.confidence
         });
+
+        // Handle escalation if needed
+        if (agentResponse.shouldEscalate) {
+            await this.handleEscalation(chatId, messageId, messageText, agentResponse, userRole);
+        }
 
         // Send response
         return this.sendResponse(chatId, messageId, agentResponse.response);
@@ -180,5 +195,85 @@ export class MessageWorker {
      */
     setFallbackSender(sender: (chatId: string) => Promise<void>): void {
         this.sendFallbackMessage = sender;
+    }
+
+    /**
+     * Handle escalation when agent determines human intervention is needed
+     */
+    private async handleEscalation(
+        chatId: string,
+        messageId: string,
+        messageText: string,
+        agentResponse: { shouldEscalate?: boolean; escalationReason?: string; confidence?: number },
+        userRole?: string
+    ): Promise<void> {
+        try {
+            logger.info('Creating escalation from agent detection', {
+                chatId,
+                messageId,
+                userRole,
+                reason: agentResponse.escalationReason,
+                confidence: agentResponse.confidence
+            });
+
+            // Get user ID from phone number
+            const phone = chatId.split('@')[0];
+            const { getUserIdByPhone } = await import('../utils/database-sync');
+            const userId = await getUserIdByPhone(phone);
+
+            if (!userId) {
+                logger.error('Cannot create escalation: user not found', { phone });
+                return;
+            }
+
+            // Get message ID from database
+            const { getSupabaseClient } = await import('../config/supabase');
+            const supabase = getSupabaseClient();
+
+            const { data: dbMessage } = await supabase
+                .from('messages')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('content', messageText)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (!dbMessage) {
+                logger.error('Cannot create escalation: message not found in database');
+                return;
+            }
+
+            // Create escalation
+            const { createEscalation } = await import('../utils/escalation-detector');
+
+            const escalationId = await createEscalation({
+                userId,
+                messageId: dbMessage.id,
+                reason: agentResponse.escalationReason || 'Agent detected need for human assistance',
+                triggerType: agentResponse.confidence !== undefined && agentResponse.confidence < 0.5 ? 'low_confidence' : 'failed_intent',
+                priority: agentResponse.confidence !== undefined && agentResponse.confidence < 0.3 ? 'high' : 'normal',
+                messageContent: messageText
+            });
+
+            if (escalationId) {
+                logger.info('Escalation created successfully', {
+                    escalationId,
+                    userId,
+                    messageId: dbMessage.id,
+                    userRole
+                });
+
+                // Get role-based escalation message
+                const { getEscalationMessage } = await import('../utils/role-manager');
+                const { parseRole } = await import('../types/role-types');
+                const role = parseRole(userRole);
+
+                const acknowledgment = getEscalationMessage(role, agentResponse.escalationReason || 'escalation');
+                await this.sendResponse(chatId, messageId, acknowledgment);
+            }
+        } catch (error) {
+            logger.error('Failed to handle escalation', error as Error);
+        }
     }
 }

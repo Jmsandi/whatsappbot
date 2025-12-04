@@ -81,6 +81,14 @@ export class ConversationHistory {
     }
 
     /**
+     * Get recent N messages from conversation history
+     */
+    getRecentMessages(chatId: string, count: number): Message[] {
+        const history = this.getHistory(chatId);
+        return history.slice(-count);
+    }
+
+    /**
      * Get cache statistics
      */
     getStats(): { size: number; maxSize: number } {

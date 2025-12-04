@@ -9,14 +9,15 @@ export class PromptBuilder {
     }
 
     /**
-     * Build the complete prompt for the agent
+     * Build the complete prompt for the agent with role-based instructions
      */
     buildPrompt(
         userMessage: string,
         conversationHistory: string,
-        includeTools: boolean = true
+        includeTools: boolean = true,
+        userRole?: string
     ): string {
-        const systemInstructions = this.getSystemInstructions();
+        const systemInstructions = this.getSystemInstructions(userRole);
         const toolInstructions = includeTools ? this.getToolInstructions() : '';
         const toolDefinitions = includeTools ? this.toolRegistry.formatToolsForPrompt() : '';
 
@@ -38,9 +39,10 @@ Assistant:`;
     buildToolResultPrompt(
         toolName: string,
         toolResult: string,
-        conversationHistory: string
+        conversationHistory: string,
+        userRole?: string
     ): string {
-        return `${this.getSystemInstructions()}
+        return `${this.getSystemInstructions(userRole)}
 
 ${conversationHistory}
 
@@ -52,18 +54,18 @@ Assistant:`;
     }
 
     /**
-     * Get system instructions
+     * Get system instructions based on user role
      */
-    private getSystemInstructions(): string {
-        return `SYSTEM: You are a public health assistant for Sierra Leone with access to a knowledge base and tools.
+    private getSystemInstructions(userRole?: string): string {
+        // Import role prompts dynamically to avoid circular dependencies
+        const { getRolePrompt } = require('./role-prompts');
+        const { UserRole, parseRole } = require('../types/role-types');
 
-Your role is to:
-- Answer questions about public health topics in Sierra Leone
-- Use available tools when you need specific information from the knowledge base
-- Provide accurate, helpful, and compassionate responses
-- Stay focused on public health topics
+        // Parse and validate role
+        const role = parseRole(userRole, UserRole.SUPPORT);
 
-If a user asks about topics unrelated to public health in Sierra Leone, politely explain that you can only assist with public health questions about Sierra Leone.`;
+        // Get role-specific prompt
+        return getRolePrompt(role);
     }
 
     /**
