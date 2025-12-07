@@ -12,7 +12,7 @@ services:
     # Health check
     healthCheckPath: /health
     
-    # Environment variables (set these in Render dashboard)
+    
     envVars:
       - key: NODE_ENV
         value: production
